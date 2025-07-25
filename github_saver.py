@@ -5,7 +5,7 @@ import sys
 from datetime import datetime
 
 class GitHubSaver:
-    def __init__(self, username=None):
+    def __init__(self, username="Cocozza-simone"):
         self.username = username or input("GitHub username: ")
         self.project_name = os.path.basename(os.getcwd())
         
