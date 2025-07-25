@@ -7,7 +7,8 @@ from datetime import datetime
 class GitHubSaver:
     def __init__(self, username="Cocozza-simone"):
         self.username = username or input("GitHub username: ")
-        self.project_name = os.path.basename(os.getcwd())
+        # Replace spaces with hyphens for GitHub repository name
+        self.project_name = os.path.basename(os.getcwd()).replace(" ", "-")
         
     def run_command(self, cmd):
         """Esegue comando e ritorna output"""
@@ -43,11 +44,18 @@ class GitHubSaver:
         self.run_command(f"git remote remove origin 2>/dev/null")
         self.run_command(f"git remote add origin {repo_url}")
         
+        # Get current branch name
+        success, current_branch, _ = self.run_command("git branch --show-current")
+        if not success:
+            # Fallback for older git versions
+            success, branch_output, _ = self.run_command("git branch")
+            current_branch = branch_output.replace("*", "").strip() if success else "master"
+        else:
+            current_branch = current_branch.strip()
+
         # Push
         print("⬆️  Caricando su GitHub...")
-        success, _, error = self.run_command("git push -u origin main")
-        if not success:
-            success, _, _ = self.run_command("git push -u origin master")
+        success, _, error = self.run_command(f"git push -u origin {current_branch}")
         
         if success:
             print(f"✅ Progetto salvato: {repo_url}")
