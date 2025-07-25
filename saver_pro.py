@@ -49,6 +49,37 @@ from rich.syntax import Syntax
 init(autoreset=True)
 console = Console()
 
+class SmartConfirm:
+    """Smart confirmation class with timeout support."""
+    @staticmethod
+    def ask(prompt: str, default: bool = True) -> bool:
+        return timeout_input(prompt, timeout=5, default=default)
+
+def timeout_input(prompt: str, timeout: int = 5, default: bool = True) -> bool:
+    """Input with timeout that returns default value if no input is received."""
+    import msvcrt
+    import time
+    
+    console.print(f"{prompt} (auto-{default} in {timeout}s)")
+    
+    start_time = time.time()
+    input_str = ''
+    
+    while True:
+        if msvcrt.kbhit():
+            char = msvcrt.getwche()
+            if char == '\r':  # Enter key
+                break
+            input_str += char
+        
+        if time.time() - start_time > timeout:
+            console.print(f"\n⏱️ No input received, using default: {'Yes' if default else 'No'}")
+            return default
+            
+        time.sleep(0.1)
+    
+    return input_str.lower() in ['y', 'yes', '']
+
 class ProjectAnalyzer:
     """Analyzes project structure and suggests appropriate commit types."""
     
@@ -329,11 +360,17 @@ class GitHubSaverPro:
         """Load token from .env file."""
         env_path = Path.cwd() / '.env'
         if env_path.exists():
-            with open(env_path, 'r') as f:
-                for line in f:
-                    if line.strip().startswith('GITHUB_TOKEN='):
-                        return line.split('=', 1)[1].strip()
-        return None
+            try:
+                with open(env_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if line.strip().startswith('GITHUB_TOKEN='):
+                            return line.split('=', 1)[1].strip()
+            except UnicodeDecodeError:
+                with open(env_path, 'r', encoding='latin-1') as f:
+                    for line in f:
+                        if line.strip().startswith('GITHUB_TOKEN='):
+                            return line.split('=', 1)[1].strip()
+        return None  # Fixed indentation
 
     def _load_from_git_credential(self) -> Optional[str]:
         """Try to extract token from git credentials."""
@@ -352,12 +389,18 @@ class GitHubSaverPro:
         """Enhanced command execution with better error handling."""
         try:
             result = subprocess.run(
-                cmd, capture_output=True, text=True, check=False,
-                cwd=cwd or self.project_path
+                cmd, 
+                capture_output=True, 
+                text=True, 
+                check=False,
+                cwd=cwd or self.project_path,
+                encoding='utf-8'  # Specify encoding
             )
             return result.returncode == 0, result.stdout.strip(), result.stderr.strip()
         except FileNotFoundError as e:
             return False, "", f"Command not found: {e}"
+        except UnicodeDecodeError as e:
+            return False, "", f"Encoding error: {e}"
         except Exception as e:
             return False, "", str(e)
 
@@ -527,109 +570,134 @@ class GitHubSaverPro:
             
         return await asyncio.gather(*futures)
 
+    def _check_git_available(self) -> bool:
+        """Check if git is available in the system."""
+        try:
+            result = subprocess.run(
+                ['git', '--version'],
+                capture_output=True,
+                text=True,
+                encoding='utf-8'
+            )
+            return result.returncode == 0
+        except:
+            return False
+
     async def save_project(self, commit_message: Optional[str] = None, 
                     interactive: bool = True, backup: bool = True) -> None:
         """Enhanced async main method with parallel operations."""
+        if not self._check_git_available():
+            console.print("❌ Git is not available in the system", style="red")
+            return
         
-        with console.status("[bold green]Initializing GitHub Saver Pro...") as status:
-            os.chdir(self.project_path)
-            
-            # Parallel initialization tasks
-            init_tasks = [
-                self._show_project_stats() if interactive else None,
-                self.backup_manager.create_backup(self.project_path, self.project_name) if backup else None,
-            ]
-            
-            await asyncio.gather(*[t for t in init_tasks if t is not None])
-            
-            # Parallel git operations
-            if not Path('.git').exists():
-                status.update("[blue]Initializing Git repository...")
-                await self._parallel_git_operations([
-                    ['git', 'init'],
-                    ['git', 'add', '.']
-                ])
-            
-            # Interactive file selection
-            if interactive and SmartConfirm.ask("Select files to commit interactively?", default=False):  # Modified
-                selected_files = self._interactive_file_selector()
-                if selected_files:
-                    for file in selected_files:
-                        self._run_command(['git', 'add', file])
-                else:
-                    console.print("No files selected!", style="red")
-                    return
-            else:
-                status.update("[blue]Adding all files...")
-                self._run_command(['git', 'add', '.'])
-            
-            # Get commit message
-            if not commit_message:
-                if interactive:
-                    commit_message, commit_type = self._smart_commit_message()
-                else:
-                    commit_message, commit_type = "feat: ✨ Auto-save", "feat"
-            else:
-                commit_type = commit_message.split(':')[0] if ':' in commit_message else 'feat'
-            
-            # Handle versioning
-            if 'version' in commit_message.lower() or not interactive:
-                version_type = 'patch'
-                if 'major' in commit_message.lower():
-                    version_type = 'major'
-                elif 'minor' in commit_message.lower():
-                    version_type = 'minor'
+        try:
+            with console.status("[bold green]Initializing GitHub Saver Pro...") as status:
+                os.chdir(self.project_path)
                 
-                version = self._get_next_version(version_type)
-                self.version_file.write_text(version)
-                self._create_changelog_entry(version, commit_message, commit_type)
-                self._run_command(['git', 'add', str(self.version_file)])
-                self._run_command(['git', 'add', str(self.changelog_file)])
+                # Parallel initialization tasks
+                init_tasks = [
+                    self._show_project_stats() if interactive else None,
+                    self.backup_manager.create_backup(self.project_path, self.project_name) if backup else None,
+                ]
                 
-                console.print(f"📦 Version updated to: [green]{version}[/green]")
-            
-            # Commit changes
-            status.update("[blue]Creating commit...")
-            success, _, error = self._run_command(['git', 'commit', '-m', commit_message])
-            if not success:
-                if "nothing to commit" in error:
-                    console.print("ℹ️ No changes to commit", style="yellow")
-                    return
+                await asyncio.gather(*[t for t in init_tasks if t is not None])
+                
+                # Parallel git operations
+                if not Path('.git').exists():
+                    status.update("[blue]Initializing Git repository...")
+                    await self._parallel_git_operations([
+                        ['git', 'init'],
+                        ['git', 'add', '.']
+                    ])
+                
+                # Interactive file selection
+                if interactive and SmartConfirm.ask("Select files to commit interactively?", default=False):  # Modified
+                    selected_files = self._interactive_file_selector()
+                    if selected_files:
+                        for file in selected_files:
+                            self._run_command(['git', 'add', file])
+                    else:
+                        console.print("No files selected!", style="red")
+                        return
                 else:
-                    console.print(f"❌ Commit failed: {error}", style="red")
-                    return
+                    status.update("[blue]Adding all files...")
+                    self._run_command(['git', 'add', '.'])
+                
+                # Get commit message
+                if not commit_message:
+                    if interactive:
+                        commit_message, commit_type = self._smart_commit_message()
+                    else:
+                        commit_message, commit_type = "feat: ✨ Auto-save", "feat"
+                else:
+                    commit_type = commit_message.split(':')[0] if ':' in commit_message else 'feat'
+                
+                # Handle versioning
+                if 'version' in commit_message.lower() or not interactive:
+                    version_type = 'patch'
+                    if 'major' in commit_message.lower():
+                        version_type = 'major'
+                    elif 'minor' in commit_message.lower():
+                        version_type = 'minor'
+                    
+                    version = self._get_next_version(version_type)
+                    self.version_file.write_text(version)
+                    self._create_changelog_entry(version, commit_message, commit_type)
+                    self._run_command(['git', 'add', str(self.version_file)])
+                    self._run_command(['git', 'add', str(self.changelog_file)])
+                    
+                    console.print(f"📦 Version updated to: [green]{version}[/green]")
+                
+                # Commit changes
+                status.update("[blue]Creating commit...")
+                success, output, error = self._run_command(['git', 'commit', '-m', commit_message])
+                
+                if not success:
+                    if error and "nothing to commit" in error:
+                        console.print("ℹ️ No changes to commit", style="yellow")
+                        return
+                    elif not error and not output:
+                        console.print("❌ Empty commit response", style="red")
+                        return
+                    else:
+                        console.print(f"❌ Commit failed: {error}", style="red")
+                        return
+                
+                # Check and create repository
+                repo_url = f"https://github.com/{self.username}/{self.project_name}.git"
+                
+                if not self._repo_exists_on_github():
+                    status.update("[yellow]Creating GitHub repository...")
+                    if not (self._create_repo_with_gh_cli() or self._create_repo_with_api()):
+                        console.print("❌ Failed to create repository", style="red")
+                        self._show_manual_instructions()
+                        return
+                
+                # Push to GitHub
+                status.update("[blue]Pushing to GitHub...")
+                self._setup_remote_and_push(repo_url)
             
-            # Check and create repository
-            repo_url = f"https://github.com/{self.username}/{self.project_name}.git"
+            # Success message
+            panel = Panel(
+                f"🎉 [bold green]SUCCESS![/bold green]\n\n"
+                f"📦 Project: [cyan]{self.project_name}[/cyan]\n"
+                f"🔗 URL: [blue]{repo_url}[/blue]\n"
+                f"💬 Commit: [yellow]{commit_message}[/yellow]",
+                title="GitHub Saver Pro",
+                border_style="green"
+            )
+            console.print(panel)
             
-            if not self._repo_exists_on_github():
-                status.update("[yellow]Creating GitHub repository...")
-                if not (self._create_repo_with_gh_cli() or self._create_repo_with_api()):
-                    console.print("❌ Failed to create repository", style="red")
-                    self._show_manual_instructions()
-                    return
+            # Save configuration
+            self._save_config()
             
-            # Push to GitHub
-            status.update("[blue]Pushing to GitHub...")
-            self._setup_remote_and_push(repo_url)
-            
-        # Success message
-        panel = Panel(
-            f"🎉 [bold green]SUCCESS![/bold green]\n\n"
-            f"📦 Project: [cyan]{self.project_name}[/cyan]\n"
-            f"🔗 URL: [blue]{repo_url}[/blue]\n"
-            f"💬 Commit: [yellow]{commit_message}[/yellow]",
-            title="GitHub Saver Pro",
-            border_style="green"
-        )
-        console.print(panel)
-        
-        # Save configuration
-        self._save_config()
-        
-        # Cleanup old backups
-        if backup:
-            self.backup_manager.cleanup_old_backups(self.project_name)
+            # Cleanup old backups
+            if backup:
+                self.backup_manager.cleanup_old_backups(self.project_name)
+
+        except Exception as e:
+            console.print(f"❌ Error during save: {str(e)}", style="red")
+            raise
 
     def _repo_exists_on_github(self) -> bool:
         """Check if repository exists on GitHub."""
@@ -742,42 +810,6 @@ class GitHubSaverPro:
             border_style="yellow"
         )
         console.print(panel)
-
-def timeout_input(prompt: str, timeout: int = 5, default: bool = True) -> bool:
-    """Input with timeout that returns default value if no input is received."""
-    console.print(f"{prompt} (auto-{default} in {timeout}s)")
-    
-    # Function to handle input
-    def get_input():
-        while True:
-            if select.select([sys.stdin], [], [], 0)[0]:
-                response = sys.stdin.readline().strip().lower()
-                if response in ['y', 'yes']:
-                    return True
-                elif response in ['n', 'no']:
-                    return False
-                return default
-            time.sleep(0.1)
-
-    # Create input thread
-    input_thread = threading.Thread(target=get_input)
-    input_thread.daemon = True
-    input_thread.start()
-    
-    # Wait for input or timeout
-    input_thread.join(timeout)
-    if input_thread.is_alive():
-        # If thread is still alive, timeout occurred
-        console.print(f"⏱️ No input received, using default: {'Yes' if default else 'No'}")
-        return default
-        
-    return False
-
-# Modify the Confirm.ask calls in the code to use timeout_input
-class SmartConfirm:
-    @staticmethod
-    def ask(prompt: str, default: bool = True) -> bool:
-        return timeout_input(prompt, timeout=5, default=default)
 
 def main():
     """Enhanced async main function."""
