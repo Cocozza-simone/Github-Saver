@@ -572,13 +572,10 @@ class GitHubSaverPro:
             with console.status("[bold green]Initializing GitHub Saver Pro...") as status:
                 os.chdir(self.project_path)
                 
-                # Parallel initialization tasks
-                init_tasks = [
-                    self._show_project_stats() if interactive else None,
-                    self.backup_manager.create_backup(self.project_path, self.project_name) if backup else None,
-                ]
-                
-                await asyncio.gather(*[t for t in init_tasks if t is not None])
+                # Show project stats and create backup
+                self._show_project_stats()
+                if backup:
+                    await self.backup_manager.create_backup(self.project_path, self.project_name)
                 
                 # Parallel git operations
                 if not Path('.git').exists():
