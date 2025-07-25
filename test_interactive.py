@@ -27,9 +27,9 @@ def test_interactive():
     
     # Test messaggio di commit
     print("\n💬 Test messaggio di commit:")
-    test_message = "Test: Verifica funzionalità interattive"
+    test_message = "Test: Verifica rilevamento branch migliorato"
     print(f"✅ Messaggio di test: {test_message}")
-    
+
     # Salva il progetto
     saver.save_project(commit_message=test_message)
 
