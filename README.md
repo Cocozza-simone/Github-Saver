@@ -105,4 +105,5 @@ git config --global user.email "tua@email.com"
 ## 📝 Licenza
 
 Questo script è open source e può essere modificato liberamente.
-# github-simply
+# Github-Saver
+
