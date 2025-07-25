@@ -333,36 +333,8 @@ class GitHubSaver:
 
             # Get current branch name
             success, branch, _ = self._run_command(["git", "branch", "--show-current"])
-            if not success or not branch.strip():
-                # Fallback: prova con git branch e cerca quello con *
-                success2, branch_list, _ = self._run_command(["git", "branch"])
-                if success2:
-                    for line in branch_list.split('\n'):
-                        if line.strip().startswith('*'):
-                            branch_info = line.strip()[1:].strip()  # Rimuovi * e spazi
-
-                            # Gestisci stati speciali come rebase
-                            if "no branch, rebasing" in branch_info:
-                                # Estrai il nome del branch dal messaggio di rebase
-                                if "rebasing" in branch_info:
-                                    branch = branch_info.split("rebasing")[-1].strip()
-                                else:
-                                    branch = "main"
-                            else:
-                                branch = branch_info
-                            break
-                    else:
-                        branch = "main"  # Default se non trova niente
-                else:
-                    branch = "main"  # Default se tutto fallisce
-            else:
-                branch = branch.strip()
-
-            # Assicurati che il branch non sia vuoto
-            if not branch:
-                branch = "main"
-
-            print(f"🔍 Branch rilevato: '{branch}'")
+            if not success:
+                branch = "main" # Default to main if command fails
 
             print(f"⬆️  Carico le modifiche sul branch '{branch}'...")
             success, stdout, stderr = self._run_command(["git", "push", "-u", "origin", branch])
