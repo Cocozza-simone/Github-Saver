@@ -19,6 +19,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from queue import Queue
 import asyncio
+import select
 
 # --- Dependency Check ---
 REQUIRED_PACKAGES = ['requests', 'colorama', 'rich']
@@ -159,6 +160,42 @@ class BackupManager:
         self.backup_queue.put((project_path, backup_path))
         return str(backup_path)
 
+    def cleanup_old_backups(self, project_name: str, max_backups: int = 5) -> None:
+        """Clean up old backups keeping only the most recent ones.
+        
+        Args:
+            project_name: Name of the project to cleanup backups for
+            max_backups: Maximum number of backups to keep (default: 5)
+        """
+        # Get all backups for this project
+        backups = sorted(
+            [p for p in self.backup_dir.glob(f"{project_name}_*")],
+            key=lambda p: p.stat().st_mtime,
+            reverse=True
+        )
+
+        # Keep only max_backups most recent backups
+        if len(backups) > max_backups:
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                # Delete old backups in parallel
+                futures = []
+                for backup in backups[max_backups:]:
+                    futures.append(
+                        executor.submit(shutil.rmtree, str(backup))
+                    )
+                
+                # Wait for all deletions to complete
+                for future in as_completed(futures):
+                    try:
+                        future.result()
+                    except Exception as e:
+                        console.print(f"⚠️ Failed to delete old backup: {e}", style="yellow")
+                        
+            console.print(
+                f"🧹 Cleaned up {len(backups) - max_backups} old backups", 
+                style="green"
+            )
+
 class GitHubSaverPro:
     """Enhanced GitHub project saver with async/threading support."""
 
@@ -279,9 +316,9 @@ class GitHubSaverPro:
                 continue
         
         console.print("⚠️ No GitHub token found!", style="yellow")
-        if Confirm.ask("Would you like to enter a token now?"):
+        if SmartConfirm.ask("Would you like to enter a token now?"):  # Modified
             token = Prompt.ask("GitHub Personal Access Token", password=True)
-            if Confirm.ask("Save token to config file?"):
+            if SmartConfirm.ask("Save token to config file?"):  # Modified
                 self.config['token'] = token
                 self._save_config()
             return token
@@ -468,7 +505,7 @@ class GitHubSaverPro:
         
         selected_files = []
         for status, filename in files:
-            include = Confirm.ask(f"Include {filename}?", default=True)
+            include = SmartConfirm.ask(f"Include {filename}?", default=True)  # Modified
             table.add_row(status, filename, "✅" if include else "❌")
             if include:
                 selected_files.append(filename)
@@ -514,7 +551,7 @@ class GitHubSaverPro:
                 ])
             
             # Interactive file selection
-            if interactive and Confirm.ask("Select files to commit interactively?", default=False):
+            if interactive and SmartConfirm.ask("Select files to commit interactively?", default=False):  # Modified
                 selected_files = self._interactive_file_selector()
                 if selected_files:
                     for file in selected_files:
@@ -705,6 +742,42 @@ class GitHubSaverPro:
             border_style="yellow"
         )
         console.print(panel)
+
+def timeout_input(prompt: str, timeout: int = 5, default: bool = True) -> bool:
+    """Input with timeout that returns default value if no input is received."""
+    console.print(f"{prompt} (auto-{default} in {timeout}s)")
+    
+    # Function to handle input
+    def get_input():
+        while True:
+            if select.select([sys.stdin], [], [], 0)[0]:
+                response = sys.stdin.readline().strip().lower()
+                if response in ['y', 'yes']:
+                    return True
+                elif response in ['n', 'no']:
+                    return False
+                return default
+            time.sleep(0.1)
+
+    # Create input thread
+    input_thread = threading.Thread(target=get_input)
+    input_thread.daemon = True
+    input_thread.start()
+    
+    # Wait for input or timeout
+    input_thread.join(timeout)
+    if input_thread.is_alive():
+        # If thread is still alive, timeout occurred
+        console.print(f"⏱️ No input received, using default: {'Yes' if default else 'No'}")
+        return default
+        
+    return False
+
+# Modify the Confirm.ask calls in the code to use timeout_input
+class SmartConfirm:
+    @staticmethod
+    def ask(prompt: str, default: bool = True) -> bool:
+        return timeout_input(prompt, timeout=5, default=default)
 
 def main():
     """Enhanced async main function."""
