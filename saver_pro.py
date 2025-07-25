@@ -736,6 +736,30 @@ class GitHubSaverPro:
         success, _, _ = self._run_command(['gh', 'auth', 'status'])
         return success
 
+    def _get_github_username(self) -> Optional[str]:
+        """Get the authenticated GitHub username."""
+        if self.token:
+            try:
+                headers = {
+                    'Authorization': f'token {self.token}',
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+                response = requests.get('https://api.github.com/user', headers=headers, timeout=10)
+                if response.status_code == 200:
+                    return response.json().get('login')
+            except:
+                pass
+
+        if self._is_gh_cli_authenticated():
+            try:
+                success, username, _ = self._run_command(['gh', 'api', 'user', '--jq', '.login'])
+                if success and username.strip():
+                    return username.strip()
+            except:
+                pass
+
+        return None
+
     def _validate_authentication(self) -> bool:
         """Validate that we have at least one working authentication method."""
         has_token = bool(self.token)
@@ -743,9 +767,19 @@ class GitHubSaverPro:
 
         if has_gh_cli:
             console.print("✅ GitHub CLI is authenticated", style="green")
+            # Update username from CLI if possible
+            real_username = self._get_github_username()
+            if real_username and real_username != self.username:
+                console.print(f"🔄 Updated username from CLI: {real_username}", style="blue")
+                self.username = real_username
             return True
         elif has_token:
             console.print("✅ GitHub token is available", style="green")
+            # Update username from token if possible
+            real_username = self._get_github_username()
+            if real_username and real_username != self.username:
+                console.print(f"🔄 Updated username from token: {real_username}", style="blue")
+                self.username = real_username
             return True
         else:
             console.print("❌ No authentication method available", style="red")

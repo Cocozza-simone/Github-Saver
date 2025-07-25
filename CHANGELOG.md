@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.16 - 2025-07-25
+
+### Tests
+- test: auto-detect GitHub username from token
+
+
 ## v1.0.15 - 2025-07-25
 
 ### Tests
