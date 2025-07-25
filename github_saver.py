@@ -11,8 +11,26 @@ class GitHubSaver:
         self.username = username or input("GitHub username: ")
         # Replace spaces with hyphens for GitHub repository name
         self.project_name = os.path.basename(os.getcwd()).replace(" ", "-")
-        self.token = token or os.getenv('GITHUB_TOKEN')
+        self.token = token or self.load_token()
         self.version_file = '.version'
+
+    def load_token(self):
+        """Carica token da file .env o variabile ambiente"""
+        # Prova prima variabile ambiente
+        token = os.getenv('GITHUB_TOKEN')
+        if token:
+            return token
+
+        # Prova file .env
+        if os.path.exists('.env'):
+            try:
+                with open('.env', 'r') as f:
+                    for line in f:
+                        if line.startswith('GITHUB_TOKEN='):
+                            return line.split('=', 1)[1].strip()
+            except:
+                pass
+        return None
         
     def run_command(self, cmd):
         """Esegue comando e ritorna output"""
@@ -114,14 +132,15 @@ class GitHubSaver:
         if not self.repo_exists():
             print("🔧 Repository non esiste, lo creo automaticamente...")
 
-            # Prova a creare con API GitHub
-            if self.create_github_repo():
+            # Prova prima con GitHub CLI (più semplice)
+            if self.create_repo_with_git():
+                return  # Repository creato e push fatto da GitHub CLI
+
+            # Fallback: prova con API GitHub
+            elif self.create_github_repo():
                 print("✅ Repository creato con API GitHub!")
             else:
-                # Fallback: crea repository vuoto e prova push
-                print("⚠️  Creazione con API fallita, provo con git...")
-                # Crea un repository vuoto su GitHub manualmente
-                self.create_repo_with_git()
+                print("⚠️  Creazione automatica fallita!")
 
         # Get current branch name
         success, current_branch, _ = self.run_command("git branch --show-current")
@@ -148,11 +167,23 @@ class GitHubSaver:
                 print(f"   Poi rilancia questo script.")
 
     def create_repo_with_git(self):
-        """Metodo alternativo per creare repository"""
+        """Metodo alternativo per creare repository con GitHub CLI"""
+        # Controlla se GitHub CLI è installato
+        success, _, _ = self.run_command("gh --version")
+        if success:
+            print("🔧 Creo repository con GitHub CLI...")
+            success, _, error = self.run_command(f"gh repo create {self.project_name} --public --source=. --remote=origin --push")
+            if success:
+                print("✅ Repository creato con GitHub CLI!")
+                return True
+            else:
+                print(f"❌ Errore GitHub CLI: {error}")
+
         print("💡 Per creare automaticamente il repository:")
         print("   1. Installa GitHub CLI: winget install GitHub.cli")
         print("   2. Oppure crea manualmente su https://github.com/new")
         print(f"   3. Nome repository: {self.project_name}")
+        return False
 
     def install_dependencies(self):
         """Installa dipendenze necessarie"""
