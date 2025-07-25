@@ -8,6 +8,7 @@ Script Python che automatizza completamente il salvataggio di progetti su GitHub
 - 📦 **Versioning automatico**: Incrementa automaticamente la versione (v1.0.0, v1.0.1, etc.)
 - 🔧 **Creazione repository**: Supporta GitHub CLI e API GitHub
 - 📝 **Commit intelligenti**: Messaggi automatici con timestamp e versione
+- 🔒 **Sicurezza token**: Token GitHub protetto in file .env
 - 🌐 **Cross-platform**: Funziona su Windows, Mac, Linux
 
 ## 📋 Prerequisiti
