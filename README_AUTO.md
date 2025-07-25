@@ -42,24 +42,42 @@ pip install requests colorama rich
 
 ### Metodo 1: Script Python Diretto
 ```bash
+# Modalità interattiva - chiede quale cartella salvare
 python auto_saver.py
+
+# Specifica cartella direttamente
+python auto_saver.py --project "C:\path\to\my\project"
+
+# Con messaggio personalizzato
+python auto_saver.py --project "C:\path\to\my\project" --message "Il mio commit"
+
+# Senza backup
+python auto_saver.py --project "C:\path\to\my\project" --no-backup
 ```
 
 ### Metodo 2: Script Batch (Windows)
-Doppio click su `save_to_github.bat` o esegui:
 ```cmd
+# Modalità interattiva
 save_to_github.bat
+
+# Con parametri
+save_to_github.bat --project "C:\path\to\my\project"
+save_to_github.bat --project "C:\path\to\my\project" --message "Il mio commit"
 ```
 
 ### Metodo 3: Script PowerShell (Windows)
 ```powershell
+# Modalità interattiva
 .\Save-ToGitHub.ps1
 
+# Specifica cartella
+.\Save-ToGitHub.ps1 -Project "C:\path\to\my\project"
+
 # Con messaggio personalizzato
-.\Save-ToGitHub.ps1 -Message "Il mio commit personalizzato"
+.\Save-ToGitHub.ps1 -Project "C:\path\to\my\project" -Message "Il mio commit"
 
 # Senza backup
-.\Save-ToGitHub.ps1 -NoBackup
+.\Save-ToGitHub.ps1 -Project "C:\path\to\my\project" -NoBackup
 ```
 
 ## 🤖 Cosa Fa Automaticamente

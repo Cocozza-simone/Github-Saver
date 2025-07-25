@@ -292,10 +292,41 @@ class GitHubSaverPro:
         return Prompt.ask("🧑‍💻 GitHub username", default="nome-github")
 
     def _ask_project_path(self) -> str:
-        """Automatic project path selection - uses current directory."""
+        """Enhanced project path selection with rich interface."""
+        console.print("\n📁 [bold blue]PROJECT FOLDER SELECTION[/bold blue]")
+
         current_dir = Path.cwd()
-        console.print(f"📍 Using current directory: [cyan]{current_dir}[/cyan]")
-        return str(current_dir)
+        console.print(f"📍 Current directory: [cyan]{current_dir}[/cyan]")
+
+        # Show available directories
+        dirs = [d for d in current_dir.iterdir()
+                if d.is_dir() and not d.name.startswith('.')]
+
+        if dirs:
+            table = Table(title="Available Folders")
+            table.add_column("Index", style="cyan")
+            table.add_column("Folder Name", style="green")
+            table.add_column("Type", style="yellow")
+
+            for i, dir_path in enumerate(dirs, 1):
+                project_type = ProjectAnalyzer(str(dir_path)).detect_project_type()
+                table.add_row(str(i), dir_path.name, project_type)
+
+            console.print(table)
+
+        choice = Prompt.ask(
+            "\n👉 Choose project folder",
+            choices=[str(i) for i in range(1, len(dirs) + 1)] + ["current", "custom"],
+            default="current"
+        )
+
+        if choice == "current":
+            return str(current_dir)
+        elif choice == "custom":
+            path = Prompt.ask("Enter folder path")
+            return str(Path(path).resolve())
+        else:
+            return str(dirs[int(choice) - 1])
 
     def _load_token(self) -> Optional[str]:
         """Enhanced token loading with multiple sources."""
@@ -567,7 +598,11 @@ class GitHubSaverPro:
         if not self._check_git_available():
             console.print("❌ Git is not available in the system", style="red")
             return
-        
+
+        # Validate authentication before proceeding
+        if not self._validate_authentication():
+            return
+
         try:
             with console.status("[bold green]Initializing GitHub Saver Pro...") as status:
                 os.chdir(self.project_path)
@@ -630,17 +665,31 @@ class GitHubSaverPro:
                 
                 # Check and create repository
                 repo_url = f"https://github.com/{self.username}/{self.project_name}.git"
-                
+
                 if not self._repo_exists_on_github():
                     status.update("[yellow]Creating GitHub repository...")
-                    if not (self._create_repo_with_gh_cli() or self._create_repo_with_api()):
-                        console.print("❌ Failed to create repository", style="red")
+
+                    # Try GitHub CLI first (if authenticated)
+                    cli_success = self._create_repo_with_gh_cli()
+                    if cli_success:
+                        console.print("✅ Repository created and pushed with GitHub CLI!", style="green")
+                        return  # CLI already handled the push
+
+                    # Fallback to API
+                    api_success = self._create_repo_with_api()
+                    if not api_success:
+                        console.print("❌ Failed to create repository with both CLI and API", style="red")
                         self._show_manual_instructions()
                         return
-                
-                # Push to GitHub
+
+                # Push to GitHub (only if not already done by CLI)
                 status.update("[blue]Pushing to GitHub...")
-                self._setup_remote_and_push(repo_url)
+                try:
+                    self._setup_remote_and_push(repo_url)
+                except Exception as e:
+                    console.print(f"❌ Push operation failed: {str(e)}", style="red")
+                    self._show_troubleshooting_tips()
+                    raise
             
             # Success message
             panel = Panel(
@@ -670,18 +719,58 @@ class GitHubSaverPro:
         success, _, _ = self._run_command(['git', 'ls-remote', repo_url])
         return success
 
+    def _is_gh_cli_authenticated(self) -> bool:
+        """Check if GitHub CLI is authenticated."""
+        success, _, _ = self._run_command(['gh', 'auth', 'status'])
+        return success
+
+    def _validate_authentication(self) -> bool:
+        """Validate that we have at least one working authentication method."""
+        has_token = bool(self.token)
+        has_gh_cli = self._is_gh_cli_authenticated()
+
+        if has_gh_cli:
+            console.print("✅ GitHub CLI is authenticated", style="green")
+            return True
+        elif has_token:
+            console.print("✅ GitHub token is available", style="green")
+            return True
+        else:
+            console.print("❌ No authentication method available", style="red")
+            panel = Panel(
+                f"[bold red]Authentication Required[/bold red]\n\n"
+                f"You need to authenticate with GitHub using one of these methods:\n\n"
+                f"[bold]Option 1: GitHub CLI (Recommended)[/bold]\n"
+                f"Run: [cyan]gh auth login[/cyan]\n\n"
+                f"[bold]Option 2: Personal Access Token[/bold]\n"
+                f"1. Create a token at: [blue]https://github.com/settings/tokens[/blue]\n"
+                f"2. Set environment variable: [cyan]set GITHUB_TOKEN=your_token[/cyan]\n"
+                f"3. Or create .env file with: [cyan]GITHUB_TOKEN=your_token[/cyan]\n\n"
+                f"[dim]The token needs 'repo' scope for repository operations.[/dim]",
+                title="Authentication Setup",
+                border_style="red"
+            )
+            console.print(panel)
+            return False
+
     def _create_repo_with_gh_cli(self) -> bool:
         """Create repository using GitHub CLI."""
+        # First check if gh CLI is available
         success, _, _ = self._run_command(['gh', '--version'])
         if not success:
             return False
-        
+
+        # Check if gh CLI is authenticated
+        if not self._is_gh_cli_authenticated():
+            console.print("⚠️ GitHub CLI is not authenticated. Skipping CLI method.", style="yellow")
+            return False
+
         console.print("🔧 Creating repository with GitHub CLI...", style="blue")
         success, _, error = self._run_command([
             'gh', 'repo', 'create', self.project_name,
             '--public', '--source=.', '--remote=origin', '--push'
         ])
-        
+
         if success:
             console.print("✅ Repository created with GitHub CLI!", style="green")
             return True
@@ -730,19 +819,45 @@ class GitHubSaverPro:
 
     def _setup_remote_and_push(self, repo_url: str):
         """Setup remote and push changes."""
+        # First, verify the repository exists on GitHub
+        if not self._repo_exists_on_github():
+            console.print("⚠️ Repository doesn't exist on GitHub yet. Waiting a moment...", style="yellow")
+            import time
+            time.sleep(2)  # Give GitHub a moment to propagate the repository
+
+            if not self._repo_exists_on_github():
+                console.print("❌ Repository still not accessible on GitHub", style="red")
+                raise Exception("Repository not found on GitHub after creation")
+
         # Check if origin remote exists, if not add it, otherwise set its URL
-        success, _, _ = self._run_command(['git', 'remote', 'get-url', 'origin'])
+        success, current_url, _ = self._run_command(['git', 'remote', 'get-url', 'origin'])
         if not success:
             # Origin doesn't exist, add it
-            self._run_command(['git', 'remote', 'add', 'origin', repo_url])
+            console.print(f"🔗 Adding remote origin: {repo_url}", style="blue")
+            success, _, error = self._run_command(['git', 'remote', 'add', 'origin', repo_url])
+            if not success:
+                console.print(f"❌ Failed to add remote: {error}", style="red")
+                raise Exception(f"Failed to add remote: {error}")
         else:
-            # Origin exists, update its URL
-            self._run_command(['git', 'remote', 'set-url', 'origin', repo_url])
-        
+            # Origin exists, check if URL needs updating
+            current_url = current_url.strip()
+            if current_url != repo_url:
+                console.print(f"🔄 Updating remote URL from {current_url} to {repo_url}", style="blue")
+                success, _, error = self._run_command(['git', 'remote', 'set-url', 'origin', repo_url])
+                if not success:
+                    console.print(f"❌ Failed to update remote URL: {error}", style="red")
+                    raise Exception(f"Failed to update remote URL: {error}")
+
         # Get current branch
         success, branch, _ = self._run_command(['git', 'branch', '--show-current'])
-        branch = branch if success else 'main'
-        
+        if not success or not branch.strip():
+            # No current branch, probably initial commit
+            branch = 'main'
+            console.print(f"🌿 Setting default branch to: {branch}", style="blue")
+            self._run_command(['git', 'branch', '-M', branch])
+        else:
+            branch = branch.strip()
+
         # Push with progress
         with Progress(
             SpinnerColumn(),
@@ -750,20 +865,32 @@ class GitHubSaverPro:
             console=console
         ) as progress:
             task = progress.add_task(f"Pushing to {branch}...", total=None)
-            
+
             success, _, error = self._run_command(['git', 'push', '-u', 'origin', branch])
-            
-            if not success and ("fetch first" in error or "rejected" in error):
-                progress.update(task, description="Syncing with remote...")
-                
-                # Try rebase
-                pull_success, _, _ = self._run_command(['git', 'pull', '--rebase', 'origin', branch])
-                if pull_success:
-                    progress.update(task, description="Retrying push...")
+
+            if not success:
+                if "fetch first" in error or "rejected" in error:
+                    progress.update(task, description="Syncing with remote...")
+
+                    # Try to pull first
+                    pull_success, _, pull_error = self._run_command(['git', 'pull', '--rebase', 'origin', branch])
+                    if pull_success:
+                        progress.update(task, description="Retrying push...")
+                        success, _, error = self._run_command(['git', 'push', '-u', 'origin', branch])
+                    else:
+                        console.print(f"⚠️ Pull failed: {pull_error}", style="yellow")
+                        # Try force push as last resort for new repositories
+                        progress.update(task, description="Force pushing...")
+                        success, _, error = self._run_command(['git', 'push', '-u', 'origin', branch, '--force'])
+
+                elif "Repository not found" in error or "does not exist" in error:
+                    progress.update(task, description="Repository not found, retrying...")
+                    import time
+                    time.sleep(3)  # Wait a bit more for GitHub to propagate
                     success, _, error = self._run_command(['git', 'push', '-u', 'origin', branch])
-            
+
             progress.remove_task(task)
-        
+
         if not success:
             console.print(f"❌ Push failed: {error}", style="red")
             raise Exception(f"Push failed: {error}")
@@ -771,14 +898,32 @@ class GitHubSaverPro:
     def _show_manual_instructions(self):
         """Show manual repository creation instructions."""
         panel = Panel(
+            f"[bold yellow]Automatic repository creation failed.[/bold yellow]\n\n"
             f"Please create the repository manually:\n\n"
             f"1. Go to: [blue]https://github.com/new[/blue]\n"
             f"2. Repository name: [cyan]{self.project_name}[/cyan]\n"
             f"3. Make it public\n"
-            f"4. Don't initialize with README\n"
-            f"5. Run this script again",
+            f"4. Don't initialize with README, .gitignore, or license\n"
+            f"5. Run this script again\n\n"
+            f"[dim]Alternative: Set up GitHub CLI authentication with 'gh auth login'[/dim]",
             title="Manual Setup Required",
             border_style="yellow"
+        )
+        console.print(panel)
+
+    def _show_troubleshooting_tips(self):
+        """Show troubleshooting tips for common issues."""
+        panel = Panel(
+            f"[bold red]Push operation failed.[/bold red]\n\n"
+            f"Common solutions:\n\n"
+            f"1. Check your internet connection\n"
+            f"2. Verify the repository exists: [blue]https://github.com/{self.username}/{self.project_name}[/blue]\n"
+            f"3. Check GitHub token permissions (needs repo scope)\n"
+            f"4. Try authenticating GitHub CLI: [cyan]gh auth login[/cyan]\n"
+            f"5. Manually push with: [cyan]git push -u origin main[/cyan]\n\n"
+            f"[dim]If the repository was created but push failed, you can manually push your changes.[/dim]",
+            title="Troubleshooting Tips",
+            border_style="red"
         )
         console.print(panel)
 

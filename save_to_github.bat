@@ -29,7 +29,9 @@ if not exist "auto_saver.py" (
 REM Esegui il salvataggio automatico
 echo 🚀 Avvio salvataggio automatico...
 echo.
-python auto_saver.py
+
+REM Passa tutti i parametri allo script Python
+python auto_saver.py %*
 
 REM Controlla il risultato
 if errorlevel 1 (

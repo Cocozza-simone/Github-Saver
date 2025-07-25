@@ -2,6 +2,7 @@
 # Salva automaticamente il progetto corrente su GitHub
 
 param(
+    [string]$Project = $null,
     [string]$Message = $null,
     [switch]$NoBackup = $false
 )
@@ -33,12 +34,17 @@ if (-not (Test-Path "auto_saver.py")) {
 }
 
 # Prepara i parametri
-$args = @()
+$scriptArgs = @()
+if ($Project) {
+    $scriptArgs += "--project"
+    $scriptArgs += $Project
+}
 if ($Message) {
-    $args += $Message
+    $scriptArgs += "--message"
+    $scriptArgs += $Message
 }
 if ($NoBackup) {
-    $args += "--no-backup"
+    $scriptArgs += "--no-backup"
 }
 
 # Esegui il salvataggio automatico
@@ -46,8 +52,8 @@ Write-Host "🚀 Avvio salvataggio automatico..." -ForegroundColor Blue
 Write-Host ""
 
 try {
-    if ($args.Count -gt 0) {
-        & python auto_saver.py @args
+    if ($scriptArgs.Count -gt 0) {
+        & python auto_saver.py @scriptArgs
     } else {
         & python auto_saver.py
     }
