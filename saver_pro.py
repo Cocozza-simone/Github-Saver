@@ -252,7 +252,19 @@ class GitHubSaverPro:
         
         self.username = username or self.config.get('username') or self._ask_username()
         self.project_path = project_path or self._ask_project_path()
-        self.project_name = Path(self.project_path).name.replace(" ", "-")
+
+        # Handle project name extraction properly
+        project_path_obj = Path(self.project_path).resolve()
+        if project_path_obj.name == "." or not project_path_obj.name:
+            # If path is "." or empty, use the parent directory name
+            self.project_name = project_path_obj.parent.name.replace(" ", "-")
+        else:
+            self.project_name = project_path_obj.name.replace(" ", "-")
+
+        # Ensure project name is valid for GitHub
+        if not self.project_name or self.project_name == "-":
+            self.project_name = "my-project"
+
         self.token = token or self._load_token()
         
         self.analyzer = ProjectAnalyzer(self.project_path)

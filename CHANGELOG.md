@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.14 - 2025-07-25
+
+### Tests
+- test: fix project name detection for current directory
+
+
 ## v1.0.13 - 2025-07-25
 
 ### Tests
