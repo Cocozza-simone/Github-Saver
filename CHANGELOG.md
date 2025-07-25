@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.17 - 2025-07-25
+
+### New feature
+- feat: Auto-save project changes
+
+
 ## v1.0.16 - 2025-07-25
 
 ### Tests
