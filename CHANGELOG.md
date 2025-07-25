@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.15 - 2025-07-25
+
+### Tests
+- test: improved error handling for existing repositories
+
+
 ## v1.0.14 - 2025-07-25
 
 ### Tests

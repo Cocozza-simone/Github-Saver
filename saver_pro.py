@@ -798,9 +798,9 @@ class GitHubSaverPro:
         if not self.token:
             console.print("⚠️ No GitHub token available", style="yellow")
             return False
-        
+
         console.print("🔧 Creating repository with GitHub API...", style="blue")
-        
+
         headers = {
             'Authorization': f'token {self.token}',
             'Accept': 'application/vnd.github.v3+json'
@@ -810,21 +810,33 @@ class GitHubSaverPro:
             'description': f'Auto-created repository for {self.project_name}',
             'private': False
         }
-        
+
         try:
             response = requests.post(
                 'https://api.github.com/user/repos',
                 headers=headers, json=data, timeout=30
             )
-            
+
             if response.status_code == 201:
                 console.print("✅ Repository created with API!", style="green")
                 return True
+            elif response.status_code == 422:
+                # Repository might already exist or other validation error
+                error_details = response.json()
+                if 'errors' in error_details:
+                    for error in error_details['errors']:
+                        if 'already exists' in error.get('message', '').lower():
+                            console.print("ℹ️ Repository already exists", style="yellow")
+                            return True  # Treat as success since repo exists
+
+                error = error_details.get('message', 'Repository creation failed.')
+                console.print(f"❌ API failed ({response.status_code}): {error}", style="red")
+                return False
             else:
                 error = response.json().get('message', 'Unknown error')
                 console.print(f"❌ API failed ({response.status_code}): {error}", style="red")
                 return False
-                
+
         except requests.RequestException as e:
             console.print(f"❌ Network error: {e}", style="red")
             return False
