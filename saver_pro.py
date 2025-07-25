@@ -244,7 +244,7 @@ class GitHubSaverPro:
         'revert': '⏪ Revert changes'
     }
 
-    def __init__(self, username: str = "Cocozza-simone", token: Optional[str] = None, 
+    def __init__(self, username: str = "nome-github", token: Optional[str] = None, 
                  project_path: Optional[str] = None, config_file: str = "~/.github_saver_config.json"):
         """Initialize with enhanced configuration."""
         self.config_file = Path(config_file).expanduser()
@@ -289,7 +289,7 @@ class GitHubSaverPro:
 
     def _ask_username(self) -> str:
         """Ask for GitHub username with validation."""
-        return Prompt.ask("🧑‍💻 GitHub username", default="Cocozza-simone")
+        return Prompt.ask("🧑‍💻 GitHub username", default="nome-github")
 
     def _ask_project_path(self) -> str:
         """Enhanced project path selection with rich interface."""
