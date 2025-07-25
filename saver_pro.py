@@ -231,17 +231,17 @@ class GitHubSaverPro:
     """Enhanced GitHub project saver with async/threading support."""
 
     COMMIT_TYPES = {
-        'feat': '✨ New feature',
-        'fix': '🐛 Bug fix', 
-        'docs': '📚 Documentation',
-        'style': '💎 Code style',
-        'refactor': '♻️ Code refactoring',
-        'test': '🧪 Tests',
-        'chore': '🔧 Maintenance',
-        'perf': '⚡ Performance',
-        'ci': '👷 CI/CD',
-        'build': '📦 Build system',
-        'revert': '⏪ Revert changes'
+        'feat': 'New feature',
+        'fix': 'Bug fix',
+        'docs': 'Documentation',
+        'style': 'Code style',
+        'refactor': 'Code refactoring',
+        'test': 'Tests',
+        'chore': 'Maintenance',
+        'perf': 'Performance',
+        'ci': 'CI/CD',
+        'build': 'Build system',
+        'revert': 'Revert changes'
     }
 
     def __init__(self, username: str = "nome-github", token: Optional[str] = None, 
@@ -292,41 +292,10 @@ class GitHubSaverPro:
         return Prompt.ask("🧑‍💻 GitHub username", default="nome-github")
 
     def _ask_project_path(self) -> str:
-        """Enhanced project path selection with rich interface."""
-        console.print("\n📁 [bold blue]PROJECT FOLDER SELECTION[/bold blue]")
-        
+        """Automatic project path selection - uses current directory."""
         current_dir = Path.cwd()
-        console.print(f"📍 Current directory: [cyan]{current_dir}[/cyan]")
-        
-        # Show available directories
-        dirs = [d for d in current_dir.iterdir() 
-                if d.is_dir() and not d.name.startswith('.')]
-        
-        if dirs:
-            table = Table(title="Available Folders")
-            table.add_column("Index", style="cyan")
-            table.add_column("Folder Name", style="green")
-            table.add_column("Type", style="yellow")
-            
-            for i, dir_path in enumerate(dirs, 1):
-                project_type = ProjectAnalyzer(str(dir_path)).detect_project_type()
-                table.add_row(str(i), dir_path.name, project_type)
-            
-            console.print(table)
-        
-        choice = Prompt.ask(
-            "\n👉 Choose project folder",
-            choices=[str(i) for i in range(1, len(dirs) + 1)] + ["current", "custom"],
-            default="current"
-        )
-        
-        if choice == "current":
-            return str(current_dir)
-        elif choice == "custom":
-            path = Prompt.ask("Enter folder path")
-            return str(Path(path).resolve())
-        else:
-            return str(dirs[int(choice) - 1])
+        console.print(f"📍 Using current directory: [cyan]{current_dir}[/cyan]")
+        return str(current_dir)
 
     def _load_token(self) -> Optional[str]:
         """Enhanced token loading with multiple sources."""
@@ -346,14 +315,7 @@ class GitHubSaverPro:
             except:
                 continue
         
-        console.print("⚠️ No GitHub token found!", style="yellow")
-        if SmartConfirm.ask("Would you like to enter a token now?"):  # Modified
-            token = Prompt.ask("GitHub Personal Access Token", password=True)
-            if SmartConfirm.ask("Save token to config file?"):  # Modified
-                self.config['token'] = token
-                self._save_config()
-            return token
-        
+        console.print("⚠️ No GitHub token found! Please set GITHUB_TOKEN environment variable or create .env file", style="yellow")
         return None
 
     def _load_from_env_file(self) -> Optional[str]:
@@ -389,18 +351,31 @@ class GitHubSaverPro:
         """Enhanced command execution with better error handling."""
         try:
             result = subprocess.run(
-                cmd, 
-                capture_output=True, 
-                text=True, 
+                cmd,
+                capture_output=True,
+                text=True,
                 check=False,
                 cwd=cwd or self.project_path,
-                encoding='utf-8'  # Specify encoding
+                encoding='utf-8',
+                errors='replace'  # Replace problematic characters
             )
             return result.returncode == 0, result.stdout.strip(), result.stderr.strip()
         except FileNotFoundError as e:
             return False, "", f"Command not found: {e}"
         except UnicodeDecodeError as e:
-            return False, "", f"Encoding error: {e}"
+            # Fallback to latin-1 encoding
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    cwd=cwd or self.project_path,
+                    encoding='latin-1'
+                )
+                return result.returncode == 0, result.stdout.strip(), result.stderr.strip()
+            except:
+                return False, "", f"Encoding error: {e}"
         except Exception as e:
             return False, "", str(e)
 
@@ -442,45 +417,48 @@ class GitHubSaverPro:
             self.changelog_file.write_text(f"# Changelog\n{entry}")
 
     def _smart_commit_message(self) -> Tuple[str, str]:
-        """Interactive commit message builder with smart suggestions."""
-        console.print("\n💬 [bold blue]SMART COMMIT BUILDER[/bold blue]")
-        
+        """Automatic commit message builder with smart suggestions."""
         # Analyze project and suggest commit type
         suggested_type = self.analyzer.suggest_commit_type()
         project_type = self.analyzer.detect_project_type()
-        
+
         console.print(f"🔍 Detected project type: [green]{project_type}[/green]")
-        console.print(f"🎯 Suggested commit type: [yellow]{suggested_type}[/yellow]")
-        
-        # Show commit types table
-        table = Table(title="Commit Types")
-        table.add_column("Type", style="cyan")
-        table.add_column("Description", style="white")
-        table.add_column("Emoji", style="yellow")
-        
-        for type_key, description in self.COMMIT_TYPES.items():
-            emoji = description.split()[0]
-            desc = ' '.join(description.split()[1:])
-            style = "green" if type_key == suggested_type else "white"
-            table.add_row(f"[{style}]{type_key}[/{style}]", desc, emoji)
-        
-        console.print(table)
-        
-        # Get commit type
-        commit_type = Prompt.ask(
-            "Choose commit type",
-            choices=list(self.COMMIT_TYPES.keys()),
-            default=suggested_type
-        )
-        
-        # Get commit message
-        message = Prompt.ask(f"Commit message for {commit_type}")
-        
+        console.print(f"🎯 Using commit type: [yellow]{suggested_type}[/yellow]")
+
+        # Generate automatic commit message based on changes
+        changed_files = self.analyzer.get_changed_files()
+        if changed_files:
+            if len(changed_files) == 1:
+                message = f"Update {Path(changed_files[0]).name}"
+            elif len(changed_files) <= 3:
+                files = ", ".join([Path(f).name for f in changed_files[:3]])
+                message = f"Update {files}"
+            else:
+                message = f"Update {len(changed_files)} files"
+        else:
+            message = "Auto-save project changes"
+
         # Build full commit message
-        emoji = self.COMMIT_TYPES[commit_type].split()[0]
-        full_message = f"{commit_type}: {emoji} {message}"
-        
-        return full_message, commit_type
+        full_message = f"{suggested_type}: {message}"
+
+        console.print(f"💬 Commit message: [cyan]{full_message}[/cyan]")
+        return full_message, suggested_type
+
+    def _safe_commit_message(self, commit_type: str, emoji: str, message: str) -> str:
+        """Create a commit message that handles encoding issues gracefully."""
+        # For Windows systems with encoding issues, skip emojis entirely
+        if os.name == 'nt' and (sys.stdout.encoding or '').lower() in ['cp1252', 'charmap']:
+            return f"{commit_type}: {message}"
+
+        try:
+            # Try with emoji first
+            full_message = f"{commit_type}: {emoji} {message}"
+            # Test if it can be encoded
+            full_message.encode('utf-8')
+            return full_message
+        except (UnicodeEncodeError, LookupError):
+            # Fallback without emoji
+            return f"{commit_type}: {message}"
 
     def _show_project_stats(self):
         """Display project statistics."""
@@ -583,8 +561,8 @@ class GitHubSaverPro:
         except:
             return False
 
-    async def save_project(self, commit_message: Optional[str] = None, 
-                    interactive: bool = True, backup: bool = True) -> None:
+    async def save_project(self, commit_message: Optional[str] = None,
+                    interactive: bool = False, backup: bool = True) -> None:
         """Enhanced async main method with parallel operations."""
         if not self._check_git_available():
             console.print("❌ Git is not available in the system", style="red")
@@ -610,25 +588,13 @@ class GitHubSaverPro:
                         ['git', 'add', '.']
                     ])
                 
-                # Interactive file selection
-                if interactive and SmartConfirm.ask("Select files to commit interactively?", default=False):  # Modified
-                    selected_files = self._interactive_file_selector()
-                    if selected_files:
-                        for file in selected_files:
-                            self._run_command(['git', 'add', file])
-                    else:
-                        console.print("No files selected!", style="red")
-                        return
-                else:
-                    status.update("[blue]Adding all files...")
-                    self._run_command(['git', 'add', '.'])
+                # Always add all files automatically
+                status.update("[blue]Adding all files...")
+                self._run_command(['git', 'add', '.'])
                 
                 # Get commit message
                 if not commit_message:
-                    if interactive:
-                        commit_message, commit_type = self._smart_commit_message()
-                    else:
-                        commit_message, commit_type = "feat: ✨ Auto-save", "feat"
+                    commit_message, commit_type = self._smart_commit_message()
                 else:
                     commit_type = commit_message.split(':')[0] if ':' in commit_message else 'feat'
                 
@@ -767,8 +733,14 @@ class GitHubSaverPro:
 
     def _setup_remote_and_push(self, repo_url: str):
         """Setup remote and push changes."""
-        # Set remote
-        self._run_command(['git', 'remote', 'set-url', 'origin', repo_url])
+        # Check if origin remote exists, if not add it, otherwise set its URL
+        success, _, _ = self._run_command(['git', 'remote', 'get-url', 'origin'])
+        if not success:
+            # Origin doesn't exist, add it
+            self._run_command(['git', 'remote', 'add', 'origin', repo_url])
+        else:
+            # Origin exists, update its URL
+            self._run_command(['git', 'remote', 'set-url', 'origin', repo_url])
         
         # Get current branch
         success, branch, _ = self._run_command(['git', 'branch', '--show-current'])
@@ -817,9 +789,9 @@ def main():
     """Enhanced async main function."""
     async def async_main():
         console.print(Panel(
-            "[bold blue]🚀 GitHub Saver Pro[/bold blue]\n"
+            "[bold blue]GitHub Saver Pro[/bold blue]\n"
             "Enhanced automatic project saving to GitHub\n"
-            "✨ Smart commits • 📊 Analytics • 💾 Backups • 🎯 Interactive",
+            "Smart commits • Analytics • Backups • Interactive",
             border_style="blue"
         ))
         
