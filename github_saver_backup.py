@@ -20,11 +20,7 @@ class GitHubSaver:
     It handles git initialization, versioning, repository creation, and pushing.
     """
 
-<<<<<<< HEAD
     def __init__(self, username: str = "Cocozza-simone", token: Optional[str] = None, project_path: Optional[str] = None):
-=======
-    def __init__(self, username: str = "name-github", token: Optional[str] = None):
->>>>>>> 149e2d8ffa99c957ede634902da4e915dda4c11b
         """
         Initializes the GitHubSaver instance.
 
