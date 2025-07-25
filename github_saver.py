@@ -20,12 +20,12 @@ class GitHubSaver:
     It handles git initialization, versioning, repository creation, and pushing.
     """
 
-    def __init__(self, username: str = "Cocozza-simone", token: Optional[str] = None):
+    def __init__(self, username: str = "name-github", token: Optional[str] = None):
         """
         Initializes the GitHubSaver instance.
 
         Args:
-            username (str): The GitHub username. Defaults to "Cocozza-simone".
+            username (str): The GitHub username. Defaults to "name-github".
             token (Optional[str]): A GitHub Personal Access Token. If None, it will be
                                    loaded from environment variables or a .env file.
         """
