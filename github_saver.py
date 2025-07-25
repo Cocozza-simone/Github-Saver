@@ -243,13 +243,38 @@ class GitHubSaver:
         print(f"⬆️  Carico le modifiche sul branch '{branch}'...")
         success, stdout, stderr = self._run_command(["git", "push", "-u", "origin", branch])
 
+        # Se il push fallisce per conflitti, prova a fare pull e ripush
+        if not success and ("fetch first" in stderr or "rejected" in stderr):
+            print("🔄 Rilevati cambiamenti remoti, sincronizzazione in corso...")
+
+            # Prova a fare pull con rebase
+            pull_success, _, pull_error = self._run_command(["git", "pull", "--rebase", "origin", branch])
+
+            if pull_success:
+                print("✅ Sincronizzazione completata, riprovo il push...")
+                success, stdout, stderr = self._run_command(["git", "push", "-u", "origin", branch])
+            else:
+                print(f"⚠️  Errore durante la sincronizzazione: {pull_error}")
+                print("💡 Provo con merge invece di rebase...")
+
+                # Fallback: prova con merge normale
+                merge_success, _, merge_error = self._run_command(["git", "pull", "origin", branch])
+                if merge_success:
+                    print("✅ Merge completato, riprovo il push...")
+                    success, stdout, stderr = self._run_command(["git", "push", "-u", "origin", branch])
+
         if success:
             version_tag = commit_message.split()[-1] if 'version' in commit_message else 'N/A'
             print("\n🎉🎉🎉")
             print(f"✅ Progetto salvato con successo: {repo_url}")
             print(f"📦 Versione committata: {version_tag}")
+            print("🎉🎉🎉\n")
         else:
             print(f"\n❌ Errore durante il push su GitHub:\n{stderr}", file=sys.stderr)
+            print("\n💡 Suggerimenti per risolvere:")
+            print("   1. Controlla la connessione internet")
+            print("   2. Verifica i permessi del repository")
+            print("   3. Prova a fare 'git pull' manualmente")
 
 def main():
     """Main function to run the script."""
