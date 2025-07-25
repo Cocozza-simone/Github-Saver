@@ -651,17 +651,19 @@ class GitHubSaverPro:
                 # Commit changes
                 status.update("[blue]Creating commit...")
                 success, output, error = self._run_command(['git', 'commit', '-m', commit_message])
-                
-                if not success:
-                    if error and "nothing to commit" in error:
-                        console.print("ℹ️ No changes to commit", style="yellow")
-                        return
-                    elif not error and not output:
-                        console.print("❌ Empty commit response", style="red")
-                        return
-                    else:
-                        console.print(f"❌ Commit failed: {error}", style="red")
-                        return
+
+                # Check for "nothing to commit" in both output and error
+                nothing_to_commit = (
+                    "nothing to commit" in (output or "").lower() or
+                    "nothing to commit" in (error or "").lower()
+                )
+
+                if nothing_to_commit:
+                    console.print("ℹ️ No changes to commit", style="yellow")
+                    return
+                elif not success:
+                    console.print(f"❌ Commit failed: {error or 'Unknown error'}", style="red")
+                    return
                 
                 # Check and create repository
                 repo_url = f"https://github.com/{self.username}/{self.project_name}.git"
