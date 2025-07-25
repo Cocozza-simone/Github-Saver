@@ -61,6 +61,11 @@ class GitHubSaver:
             print(f"✅ Progetto salvato: {repo_url}")
         else:
             print(f"❌ Errore: {error}")
+            if "Repository not found" in error:
+                print(f"\n💡 Il repository non esiste ancora su GitHub!")
+                print(f"   Crea un nuovo repository qui: https://github.com/new")
+                print(f"   Nome repository: {self.project_name}")
+                print(f"   Poi rilancia questo script.")
 
 if __name__ == "__main__":
     message = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else None
