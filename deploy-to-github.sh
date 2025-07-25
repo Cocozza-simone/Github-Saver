@@ -4,7 +4,7 @@
 set -e
 
 # Configurazione
-GITHUB_USERNAME="your-username"  # Sostituisci con il tuo username
+GITHUB_USERNAME="Cocozza-simone"  # Sostituisci con il tuo username
 PROJECT_NAME=$(basename "$PWD")
 REMOTE_NAME="origin"
 
