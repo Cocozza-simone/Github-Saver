@@ -9,6 +9,7 @@ Script Python che automatizza completamente il salvataggio di progetti su GitHub
 - 🔧 **Creazione repository**: Supporta GitHub CLI e API GitHub
 - 📝 **Commit intelligenti**: Messaggi automatici con timestamp e versione
 - 🔒 **Sicurezza token**: Token GitHub protetto in file .env
+- 🎯 **Interfaccia interattiva**: Chiede cartella e messaggio di commit
 - 🌐 **Cross-platform**: Funziona su Windows, Mac, Linux
 
 ## 📋 Prerequisiti
